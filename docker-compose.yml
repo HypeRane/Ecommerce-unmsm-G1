@@ -1,0 +1,35 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  catalog-users:
+    build: ./services/catalog-users
+    ports:
+      - "8081:8080"
+    environment:
+      - PORT=8080
+      - FRONTEND_ORIGIN=http://localhost:3000
+      - SUPABASE_DB_URL=${SUPABASE_DB_URL}
+
+  payments:
+    build: ./services/payments
+    ports:
+      - "8082:8080"
+    environment:
+      - PORT=8080
+      - FRONTEND_ORIGIN=http://localhost:3000
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+
+  suggestions:
+    build: ./services/suggestions
+    ports:
+      - "8083:8080"
+    environment:
+      - PORT=8080
+      - FRONTEND_ORIGIN=http://localhost:3000
+      - REDIS_URL=redis:6379
+    depends_on:
+      - redis
