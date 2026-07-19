@@ -3,6 +3,8 @@ type Product = {
   name: string;
   price: number;
   stock: number;
+  category?: string;
+  active?: boolean;
 };
 
 async function getProducts(): Promise<Product[]> {
@@ -10,7 +12,10 @@ async function getProducts(): Promise<Product[]> {
   try {
     const res = await fetch(`${base}/products`, { cache: "no-store" });
     if (!res.ok) return [];
-    return res.json();
+    const data = await res.json();
+    // El backend devuelve { items: [...], meta: {...} }
+    // Si es un array directo, devuelve eso; si es un objeto con items, extrae items
+    return Array.isArray(data) ? data : data.items || [];
   } catch {
     // Si el microservicio aún no responde (cloud o local), no rompas la página.
     return [];
@@ -37,6 +42,7 @@ export default async function CatalogoPage() {
             <p className="font-medium">{p.name}</p>
             <p className="text-gray-600">S/ {p.price.toFixed(2)}</p>
             <p className="text-sm text-gray-400">Stock: {p.stock}</p>
+            {p.category && <p className="text-xs text-gray-500">Categoría: {p.category}</p>}
           </li>
         ))}
       </ul>
