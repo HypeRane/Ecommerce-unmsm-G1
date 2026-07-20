@@ -1,0 +1,48 @@
+# Render Blueprint — despliega los 3 microservicios de una sola vez.
+# Uso: en Render Dashboard -> New -> Blueprint -> conectar este repo de GitHub.
+# Render detecta este archivo y crea los 3 servicios automáticamente.
+services:
+  - type: web
+    name: catalog-users
+    runtime: docker
+    dockerfilePath: ./services/catalog-users/Dockerfile
+    dockerContext: ./services/catalog-users
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: FRONTEND_ORIGIN
+        sync: false   # péguenle la URL de Vercel una vez la tengan
+      - key: SUPABASE_DB_URL
+        sync: false   # connection string de Supabase (Settings -> Database)
+
+  - type: web
+    name: payments
+    runtime: docker
+    dockerfilePath: ./services/payments/Dockerfile
+    dockerContext: ./services/payments
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: STRIPE_SECRET_KEY
+        sync: false
+      - key: STRIPE_WEBHOOK_SECRET
+        sync: false
+      - key: SUPABASE_URL
+        sync: false   # https://xxxx.supabase.co (Settings -> API -> Project URL)
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false   # Settings -> API -> service_role (NUNCA exponerla al frontend)
+
+  - type: web
+    name: suggestions
+    runtime: docker
+    dockerfilePath: ./services/suggestions/Dockerfile
+    dockerContext: ./services/suggestions
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: FRONTEND_ORIGIN
+        sync: false
+      - key: REDIS_URL
+        sync: false
