@@ -14,64 +14,84 @@ type Product = {
 };
 
 async function getProduct(id: string): Promise<Product | null> {
-  const base = process.env.NEXT_PUBLIC_CATALOG_API || "http://localhost:8081";
-
-  // Intentar microservicio
-  try {
-    const res = await fetch(`${base}/products/${id}`, { cache: "no-store" });
-    if (res.ok) return await res.json();
-  } catch {}
-
-  // Fallback a Supabase
   try {
     const supabase = await createClient();
     const { data } = await supabase
       .from("products")
-      .select("*")
+      .select("*, categories(name)")
       .eq("id", id)
       .single();
-    return data as Product | null;
+
+    if (!data) return null;
+
+    return {
+      id: data.id,
+      name: data.name,
+      description: data.description,
+      price: data.price,
+      stock: data.stock,
+      category: data.categories?.name || "General",
+      image_url: data.image_url,
+      sales: data.sales,
+    };
   } catch {
     return null;
   }
 }
 
 async function getSuggestions(productId: string): Promise<Product[]> {
-  const base = process.env.NEXT_PUBLIC_SUGGESTIONS_API || "http://localhost:8083";
-
-  // Intentar microservicio
-  try {
-    const res = await fetch(`${base}/suggestions?product_id=${productId}`, {
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.length > 0) return data;
-    }
-  } catch {}
-
-  // Fallback a Supabase (productos relacionados por categoría)
   try {
     const supabase = await createClient();
-    const { data: product } = await supabase
+
+    // Intentar RPC get_related_products si existe
+    const { data: rpcData, error: rpcErr } = await supabase.rpc("get_related_products", {
+      product_id: productId,
+      limit_count: 4,
+    });
+
+    if (!rpcErr && rpcData && rpcData.length > 0) {
+      return rpcData.map((p: { id: string; name: string; price: number; image_url?: string }) => ({
+        id: p.id,
+        name: p.name,
+        price: p.price,
+        stock: 10,
+        image_url: p.image_url,
+      }));
+    }
+
+    // Fallback por categoría
+    const { data: currentProduct } = await supabase
       .from("products")
       .select("category_id")
       .eq("id", productId)
       .single();
 
-    if (product?.category_id) {
+    if (currentProduct?.category_id) {
       const { data: related } = await supabase
         .from("products")
         .select("*")
-        .eq("category_id", product.category_id)
+        .eq("category_id", currentProduct.category_id)
         .neq("id", productId)
         .eq("is_active", true)
         .limit(4);
-      return (related as Product[]) || [];
-    }
-  } catch {}
 
-  return [];
+      if (related && related.length > 0) {
+        return related as Product[];
+      }
+    }
+
+    // Top más vendidos si no hay relacionados
+    const { data: bestSellers } = await supabase
+      .from("products")
+      .select("*")
+      .eq("is_active", true)
+      .neq("id", productId)
+      .limit(4);
+
+    return (bestSellers as Product[]) || [];
+  } catch {
+    return [];
+  }
 }
 
 export default async function ProductDetailPage({

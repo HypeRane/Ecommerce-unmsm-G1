@@ -19,44 +19,25 @@ type ApiResponse = {
 async function getProducts(
   searchParams: Record<string, string>,
 ): Promise<ApiResponse> {
-  const base = process.env.NEXT_PUBLIC_CATALOG_API || "http://localhost:8081";
-  const params = new URLSearchParams();
-  if (searchParams.search) params.set("search", searchParams.search);
-  if (searchParams.category) params.set("category", searchParams.category);
-  if (searchParams.sort) params.set("sort", searchParams.sort);
-  if (searchParams.page) params.set("page", searchParams.page);
-  params.set("limit", searchParams.limit || "12");
+  const limit = parseInt(searchParams.limit || "12", 10);
+  const page = parseInt(searchParams.page || "1", 10);
+  const offset = (page - 1) * limit;
 
-  // Intentar microservicio
-  try {
-    const res = await fetch(`${base}/products?${params.toString()}`, {
-      cache: "no-store",
-    });
-    if (res.ok) {
-      const data = await res.json();
-      if (data.items && data.items.length > 0) return data;
-    }
-  } catch {}
-
-  // Fallback directo a Supabase
   try {
     const supabase = await createClient();
-    const limit = parseInt(params.get("limit") || "12", 10);
-    const page = parseInt(params.get("page") || "1", 10);
-    const offset = (page - 1) * limit;
 
     let query = supabase
       .from("products")
-      .select("*", { count: "exact" })
+      .select("*, categories(name, slug)", { count: "exact" })
       .eq("is_active", true)
       .range(offset, offset + limit - 1);
 
-    const category = params.get("category");
+    const category = searchParams.category;
     if (category) {
       const { data: catData } = await supabase
         .from("categories")
         .select("id")
-        .eq("slug", category)
+        .or(`slug.eq.${category},name.ilike.%${category}%`)
         .single();
 
       if (catData) {
@@ -64,12 +45,12 @@ async function getProducts(
       }
     }
 
-    const search = params.get("search");
+    const search = searchParams.search;
     if (search) {
       query = query.ilike("name", `%${search}%`);
     }
 
-    const sort = params.get("sort");
+    const sort = searchParams.sort;
     switch (sort) {
       case "price_asc":
         query = query.order("price", { ascending: true });
@@ -80,6 +61,9 @@ async function getProducts(
       case "name_desc":
         query = query.order("name", { ascending: false });
         break;
+      case "sales_desc":
+        query = query.order("sales", { ascending: false });
+        break;
       default:
         query = query.order("name", { ascending: true });
     }
@@ -89,12 +73,23 @@ async function getProducts(
     const total = count || 0;
     const pages = Math.max(1, Math.ceil(total / limit));
 
+    const formattedProducts = (data || []).map((item) => ({
+      id: item.id,
+      name: item.name,
+      price: item.price,
+      stock: item.stock,
+      category: item.categories?.name || "General",
+      image_url: item.image_url,
+      sales: item.sales,
+    }));
+
     return {
-      items: (data as Product[]) || [],
+      items: formattedProducts,
       meta: { page, limit, total, pages },
     };
-  } catch {
-    return { items: [], meta: { page: 1, limit: 12, total: 0, pages: 0 } };
+  } catch (error) {
+    console.error("Error cargando productos de catálogo:", error);
+    return { items: [], meta: { page: 1, limit: 12, total: 0, pages: 1 } };
   }
 }
 
